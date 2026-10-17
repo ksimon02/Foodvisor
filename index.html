@@ -31,6 +31,7 @@
     <main>
       <section id="view-diario" class="view"></section>
       <section id="view-progresso" class="view" hidden></section>
+      <section id="view-exames" class="view" hidden></section>
       <section id="view-plano" class="view" hidden></section>
       <section id="view-perfil" class="view" hidden></section>
     </main>
@@ -43,7 +44,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 16v-4M11 16V8M16 16v-6M20 16V5"/></svg>
         <span>Progresso</span>
       </button>
-      <button type="button" id="fab" class="fab" aria-label="Adicionar alimento">+</button>
+      <button type="button" data-tab="exames">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.5h6V4M8 13h2l1.5-3 2 6 1.5-3H16"/></svg>
+        <span>Exames</span>
+      </button>
       <button type="button" data-tab="plano">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20c0-9 6-15 15-15 0 9-6 15-15 15z"/><path d="M5 20l8-8"/></svg>
         <span>Plano</span>
@@ -112,6 +116,38 @@
       </div>
       <button type="submit" class="btn btn-primary">Adicionar</button>
     </form>
+  </dialog>
+
+  <!-- Novo exame de bioimpedância -->
+  <dialog id="examSheet" class="sheet" aria-labelledby="examTitle">
+    <form id="examForm" class="sheet-body scroll">
+      <div class="sheet-head">
+        <h2 id="examTitle">Nova bioimpedância</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button>
+      </div>
+      <label class="photo-pick">
+        <input id="examPhoto" type="file" accept="image/*" hidden>
+        <span id="examPhotoLabel">📷 Anexar foto do resultado</span>
+      </label>
+      <img id="examPreview" class="exam-photo" alt="Foto anexada (toque para ampliar)" hidden>
+      <p class="muted">Com a foto ao lado, digite os valores impressos. Só a data é obrigatória: deixe em branco o que o seu exame não mostrar.</p>
+      <label class="field">Data do exame<input name="date" type="date" required></label>
+      <div id="examFields" class="grid2"></div>
+      <label class="field">Local ou aparelho<input name="local" placeholder="ex.: InBody 270 na academia" autocomplete="off"></label>
+      <label class="field">Observações<textarea name="notes" rows="2"></textarea></label>
+      <button type="submit" class="btn btn-primary">Salvar exame</button>
+    </form>
+  </dialog>
+
+  <!-- Detalhes do exame -->
+  <dialog id="examView" class="sheet" aria-label="Detalhes do exame">
+    <div id="examViewBody" class="sheet-body scroll"></div>
+  </dialog>
+
+  <!-- Foto em tela cheia -->
+  <dialog id="viewer" class="viewer" aria-label="Foto do exame">
+    <button type="button" class="icon-btn viewer-close" data-close aria-label="Fechar">✕</button>
+    <div class="viewer-scroll"><img id="viewerImg" alt="Foto do exame"></div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

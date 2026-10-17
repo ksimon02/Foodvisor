@@ -9,7 +9,8 @@ Diário alimentar personalizado, inspirado no app Foodvisor (sem ligação com a
 - **Diário**: anel de calorias, barras de macros, refeições, busca em ~100 alimentos brasileiros com porções, quantidade em porções, alimentos manuais, água por copos, dica do dia e sequência de dias.
 - **Personalização pelas respostas**: avisos de alergênicos, sugestões que respeitam a dieta (vegetariana, vegana, pescetariana, low carb), dicas para os seus desafios e motivações e ideias de refeições ordenadas pelo objetivo.
 - **Progresso**: registro de peso com gráfico, % do caminho até a meta, previsão de data e calorias dos últimos 7 dias.
-- **Perfil**: respostas, refazer o questionário, ajuste manual das metas e backup.
+- **Exames (bioimpedância)**: foto do resultado impresso guardada no aparelho (IndexedDB), valores do laudo, cálculos derivados (massa de gordura, massa magra, IMC), comparação com o exame anterior, gráficos de evolução e opção de usar o metabolismo basal do exame nas metas.
+- **Perfil**: respostas, refazer o questionário, ajuste manual das metas, backup (inclui as fotos) e convite para instalar o app.
 
 ## Como usar no celular (sem computador ligado)
 

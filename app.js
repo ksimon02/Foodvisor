@@ -44,7 +44,7 @@ const $ = (s) => document.querySelector(s);
 const r1 = (n) => Math.round(n * 10) / 10;
 const fmt = (n, d = 0) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: d });
 const pct = (a, b) => (b ? Math.min(100, (a / b) * 100) : 0);
-const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const parseNum = (s) => parseFloat(String(s).replace(',', '.'));
 const listPt = (a) => (a.length > 1 ? `${a.slice(0, -1).join(', ')} e ${a[a.length - 1]}` : a[0] || '');
 
@@ -57,6 +57,7 @@ const addDays = (s, n) => {
   return iso(d);
 };
 const longDate = (d) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtDate = (s) => parse(s).toLocaleDateString('pt-BR');
 const shortDate = (d) => d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
 const dayLabel = (s) => {
   if (s === today()) return 'Hoje';
@@ -104,6 +105,7 @@ function load() {
     entries: d.entries || {},
     water: d.water || {},
     weights: d.weights || [],
+    exams: d.exams || [],
   };
 }
 function save() {
@@ -155,10 +157,14 @@ const etaFor = (p, pace) => {
   return d;
 };
 
-// Metabolismo basal pela fórmula de Mifflin-St Jeor; 1 kg ≈ 7700 kcal.
+// Metabolismo basal estimado pelo questionário (fórmula de Mifflin-St Jeor).
+const mifflin = (p) => 10 * p.peso + 6.25 * p.altura - 5 * p.idade + (p.sexo === 'masculino' ? 5 : -161);
+
+// Usa o metabolismo da bioimpedância quando a pessoa escolheu; 1 kg ≈ 7700 kcal.
 function computePlan(p) {
   const notes = [];
-  const bmr = 10 * p.peso + 6.25 * p.altura - 5 * p.idade + (p.sexo === 'masculino' ? 5 : -161);
+  const bmr = p.tmbExame ? p.tmbExame.kcal : mifflin(p);
+  if (p.tmbExame) notes.push(`Metabolismo basal da sua bioimpedância de ${fmtDate(p.tmbExame.date)}: ${fmt(p.tmbExame.kcal)} kcal por dia.`);
   const tdee = bmr * (ACTIVITY[p.atividade] || 1.375);
   let kcal = tdee;
   let pace = 0;
@@ -552,9 +558,9 @@ function showApp() {
 }
 
 function render() {
-  for (const t of ['diario', 'progresso', 'plano', 'perfil']) $('#view-' + t).hidden = t !== tab;
+  for (const t of ['diario', 'progresso', 'exames', 'plano', 'perfil']) $('#view-' + t).hidden = t !== tab;
   document.querySelectorAll('.tabbar [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  ({ diario: renderDiario, progresso: renderProgresso, plano: renderPlano, perfil: renderPerfil })[tab]();
+  ({ diario: renderDiario, progresso: renderProgresso, exames: renderExames, plano: renderPlano, perfil: renderPerfil })[tab]();
 }
 
 const mascot = () => h('img', { src: 'icons/avocado.svg', class: 'mascot-sm', alt: '' });
@@ -588,6 +594,7 @@ function renderDiario() {
         h('h1', { text: `Olá${p.nome ? ', ' + p.nome : ''}! 👋` }),
         h('div', { class: 'sub', text: s ? `🔥 ${s} ${s === 1 ? 'dia seguido' : 'dias seguidos'} registrando` : 'Vamos registrar a primeira refeição de hoje?' })),
       mascot()),
+    installCard(true),
     h('div', { class: 'week' },
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Semana anterior', onclick: () => { day = addDays(day, -7); render(); } }, '‹'),
       h('div', { class: 'week-days' }, week.map((d) => h('button', {
@@ -650,12 +657,16 @@ function removeEntry(idx) {
 }
 
 function weightChart() {
-  const pts = state.weights.slice(-30);
+  const pts = state.weights.slice(-30).map((w) => ({ date: w.date, v: w.kg }));
   if (pts.length < 2) return h('p', { class: 'muted', text: 'Registre o seu peso em dias diferentes para ver o gráfico.' });
   const p = state.profile;
-  const target = changesWeight(p) && p.meta ? p.meta : null;
-  const W = 320, H = 170, L = 34, R = 12, T = 12, B = 22;
-  const vals = pts.map((w) => w.kg).concat(target == null ? [] : [target]);
+  return lineChart(pts, { target: changesWeight(p) && p.meta ? p.meta : null, label: 'Gráfico de peso' });
+}
+
+// pts: [{ date, v }] em ordem de data.
+function lineChart(pts, { target = null, decimals = 1, label }) {
+  const W = 320, H = 170, L = 38, R = 12, T = 12, B = 22;
+  const vals = pts.map((w) => w.v).concat(target == null ? [] : [target]);
   let min = Math.min(...vals);
   let max = Math.max(...vals);
   const pad = Math.max(0.5, (max - min) * 0.15);
@@ -665,15 +676,15 @@ function weightChart() {
   const span = parse(pts[pts.length - 1].date).getTime() - t0 || 1;
   const x = (d) => L + 10 + ((W - L - R - 20) * (parse(d).getTime() - t0)) / span;
   const y = (v) => T + (H - T - B) * (1 - (v - min) / (max - min));
-  const path = pts.map((w, i) => `${i ? 'L' : 'M'}${x(w.date).toFixed(1)},${y(w.kg).toFixed(1)}`).join('');
+  const path = pts.map((w, i) => `${i ? 'L' : 'M'}${x(w.date).toFixed(1)},${y(w.v).toFixed(1)}`).join('');
   const ddmm = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico de peso">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">`;
   for (const v of [max - pad, min + pad]) {
-    svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="lbl" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${fmt(v, 1)}</text>`;
+    svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="lbl" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${fmt(v, decimals)}</text>`;
   }
   if (target != null) svg += `<line class="goal" x1="${L}" x2="${W - R}" y1="${y(target)}" y2="${y(target)}"/><text class="lbl" x="${W - R}" y="${y(target) - 4}" text-anchor="end">meta ${fmt(target, 1)}</text>`;
   svg += `<path class="line" d="${path}"/>`;
-  for (const w of pts) svg += `<circle class="dot" cx="${x(w.date)}" cy="${y(w.kg)}" r="3.5"/>`;
+  for (const w of pts) svg += `<circle class="dot" cx="${x(w.date)}" cy="${y(w.v)}" r="3.5"/>`;
   svg += `<text class="lbl" x="${L}" y="${H - 4}">${ddmm(pts[0].date)}</text><text class="lbl" x="${W - R}" y="${H - 4}" text-anchor="end">${ddmm(pts[pts.length - 1].date)}</text></svg>`;
   const el = h('div', { class: 'chart' });
   el.innerHTML = svg; // somente números e datas gerados aqui
@@ -857,9 +868,10 @@ function renderPerfil() {
       h('h2', { text: '🎯 Metas diárias' }),
       h('p', { class: 'muted', text: 'Calculadas pelo questionário. Ajuste se o seu nutricionista recomendou outros valores.' }),
       form),
+    installCard(false),
     h('div', { class: 'card' },
       h('h2', { text: '💾 Seus dados' }),
-      h('p', { class: 'muted', text: 'Tudo fica salvo só neste aparelho. Faça backup de vez em quando.' }),
+      h('p', { class: 'muted', text: 'Tudo fica salvo só neste aparelho, inclusive as fotos dos exames. Faça backup de vez em quando.' }),
       h('div', { class: 'grid2' },
         h('button', { type: 'button', class: 'btn btn-line', onclick: exportBackup }, 'Exportar backup'),
         h('button', { type: 'button', class: 'btn btn-line', onclick: () => fileInput.click() }, 'Importar backup')),
@@ -868,9 +880,21 @@ function renderPerfil() {
   );
 }
 
-function exportBackup() {
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(blob);
+});
+
+async function exportBackup() {
+  const photos = {};
+  for (const ex of state.exams) {
+    const blob = ex.photo && (await getPhoto(ex.photo).catch(() => null));
+    if (blob) photos[ex.photo] = await blobToDataUrl(blob);
+  }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ ...state, photos })], { type: 'application/json' }));
   a.download = `foodvisor-backup-${today()}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -883,6 +907,9 @@ async function importBackup(e) {
     const d = JSON.parse(await file.text());
     if (!d || typeof d.entries !== 'object') throw new Error('formato');
     if (!confirm('Substituir os dados atuais pelo backup?')) return;
+    for (const [id, url] of Object.entries(d.photos || {})) await putPhoto(id, await (await fetch(url)).blob());
+    delete d.photos;
+    photoUrls.clear();
     localStorage.setItem(KEY, JSON.stringify(d));
     state = load();
     if (state.profile) showApp();
@@ -893,6 +920,398 @@ async function importBackup(e) {
   } finally {
     e.target.value = '';
   }
+}
+
+/* ================= Fotos (IndexedDB) ================= */
+
+// O localStorage é pequeno demais para imagens; as fotos dos exames ficam no IndexedDB.
+let dbPromise;
+function photoDb() {
+  dbPromise ||= new Promise((resolve, reject) => {
+    const req = indexedDB.open('foodvisor', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('photos');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+async function photoOp(mode, fn) {
+  const db = await photoDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('photos', mode);
+    const req = fn(tx.objectStore('photos'));
+    tx.oncomplete = () => resolve(req.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const putPhoto = (id, blob) => photoOp('readwrite', (st) => st.put(blob, id));
+const getPhoto = (id) => photoOp('readonly', (st) => st.get(id));
+const deletePhoto = (id) => photoOp('readwrite', (st) => st.delete(id));
+
+const photoUrls = new Map();
+async function photoUrl(id) {
+  if (!photoUrls.has(id)) {
+    const blob = await getPhoto(id);
+    photoUrls.set(id, blob ? URL.createObjectURL(blob) : null);
+  }
+  return photoUrls.get(id);
+}
+function forgetPhotoUrl(id) {
+  if (photoUrls.get(id)) URL.revokeObjectURL(photoUrls.get(id));
+  photoUrls.delete(id);
+}
+
+// Reduz a foto para no máximo 2000 px no lado maior: o texto impresso continua legível e o arquivo fica leve.
+async function compressPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+    const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve) => canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.85));
+  } catch (e) {
+    return file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* ================= Bioimpedância ================= */
+
+// better: direção desejável da medida ('down' = quanto menor, melhor). dec: casas decimais.
+const EXAM_FIELDS = [
+  { k: 'peso', label: 'Peso', short: 'Peso', unit: 'kg' },
+  { k: 'gordura_pct', label: 'Gordura corporal', short: '% gordura', unit: '%', better: 'down' },
+  { k: 'massa_gorda', label: 'Massa de gordura', short: 'Gordura (kg)', unit: 'kg', better: 'down' },
+  { k: 'massa_muscular', label: 'Massa muscular esquelética', short: 'Músculo', unit: 'kg', better: 'up' },
+  { k: 'massa_magra', label: 'Massa magra', short: 'Massa magra', unit: 'kg', better: 'up' },
+  { k: 'agua_l', label: 'Água corporal', short: 'Água (L)', unit: 'L' },
+  { k: 'agua_pct', label: 'Água corporal', short: 'Água (%)', unit: '%' },
+  { k: 'massa_ossea', label: 'Massa óssea', short: 'Óssea', unit: 'kg' },
+  { k: 'visceral', label: 'Gordura visceral (nível)', short: 'Visceral', unit: '', better: 'down', dec: 0 },
+  { k: 'tmb', label: 'Taxa metabólica basal', short: 'TMB', unit: 'kcal', dec: 0 },
+  { k: 'idade_metabolica', label: 'Idade metabólica', short: 'Idade metab.', unit: 'anos', better: 'down', dec: 0 },
+  { k: 'imc', label: 'IMC', short: 'IMC', unit: '' },
+];
+const examField = (k) => EXAM_FIELDS.find((f) => f.k === k);
+const valueText = (f, v) => `${fmt(v, f.dec ?? 1)}${f.unit ? ' ' + f.unit : ''}`;
+
+// Completa o que dá para calcular a partir do que foi digitado (ex.: massa de gordura = peso × % de gordura).
+function examValues(ex) {
+  const v = { ...ex.values };
+  const calc = new Set();
+  const set = (k, val) => {
+    if (v[k] == null && Number.isFinite(val)) {
+      v[k] = r1(val);
+      calc.add(k);
+    }
+  };
+  if (v.peso) {
+    if (v.gordura_pct != null) set('massa_gorda', (v.peso * v.gordura_pct) / 100);
+    if (v.massa_gorda != null) set('gordura_pct', (v.massa_gorda / v.peso) * 100);
+    if (v.massa_gorda != null) set('massa_magra', v.peso - v.massa_gorda);
+    if (v.agua_l != null) set('agua_pct', (v.agua_l / v.peso) * 100);
+    if (state.profile?.altura) set('imc', v.peso / (state.profile.altura / 100) ** 2);
+  }
+  return { ex, v, calc };
+}
+
+function betterDir(f) {
+  if (f.k === 'peso') return { perder: 'down', ganhar: 'up', massa: 'up' }[state.profile.objetivo] || null;
+  return f.better || null;
+}
+
+function deltaEl(f, cur, prev) {
+  if (cur == null || prev == null) return null;
+  const d = cur - prev;
+  if (Math.abs(d) < 0.05) return h('span', { class: 'delta', text: '= igual' });
+  const dir = betterDir(f);
+  const good = dir ? (dir === 'down' ? d < 0 : d > 0) : null;
+  return h('span', {
+    class: 'delta' + (good === true ? ' good' : good === false ? ' bad' : ''),
+    text: `${d > 0 ? '▲ +' : '▼ −'}${fmt(Math.abs(d), f.dec ?? 1)}`,
+  });
+}
+
+// Metabolismo basal do exame: o valor do aparelho ou, sem ele, a fórmula de Katch-McArdle pela massa magra.
+function examBmr(x) {
+  if (x.v.tmb) return { kcal: Math.round(x.v.tmb), fonte: 'aparelho' };
+  if (x.v.massa_magra) return { kcal: Math.round(370 + 21.6 * x.v.massa_magra), fonte: 'massa magra' };
+  return null;
+}
+
+function applyGoalsFromPlan(msg) {
+  const plan = computePlan(state.profile);
+  state.goals = { kcal: plan.kcal, p: plan.p, c: plan.c, f: plan.f, water: plan.water };
+  save();
+  render();
+  toast(msg);
+}
+
+function thumb(ex) {
+  if (!ex.photo) return h('span', { class: 'thumb ph', text: '📋' });
+  const img = h('img', { class: 'thumb', alt: '' });
+  photoUrl(ex.photo).then((u) => { if (u) img.src = u; }).catch(() => {});
+  return img;
+}
+
+let examMetric = null;
+
+function renderExames() {
+  const p = state.profile;
+  const header = h('header', { class: 'top' },
+    h('div', {}, h('h1', { text: 'Bioimpedância' }), h('div', { class: 'sub', text: 'Seus exames e a evolução real do seu corpo' })),
+    mascot());
+  const addBtn = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => openExamForm() }, '📷 Adicionar exame');
+
+  if (!state.exams.length) {
+    setView('#view-exames', header, h('div', { class: 'card empty-state' },
+      h('img', { src: 'icons/avocado.svg', class: 'mascot-lg', alt: '' }),
+      h('h2', { text: 'Nenhum exame ainda' }),
+      h('p', { class: 'muted', text: 'Tire uma foto do resultado impresso da sua bioimpedância e preencha os principais valores. O app guarda a foto e monta a sua evolução: gordura, massa muscular, água, gordura visceral e mais.' }),
+      addBtn));
+    return;
+  }
+
+  const all = state.exams.map(examValues);
+  const last = all[all.length - 1];
+  const prev = all[all.length - 2];
+  const first = all[0];
+
+  const since = [['massa_gorda', 'kg de gordura'], ['massa_muscular', 'kg de músculo'], ['peso', 'kg no peso']]
+    .filter(([k]) => all.length > 1 && first.v[k] != null && last.v[k] != null)
+    .map(([k, label]) => {
+      const d = last.v[k] - first.v[k];
+      return `${d > 0 ? '+' : d < 0 ? '−' : ''}${fmt(Math.abs(d), 1)} ${label}`;
+    });
+
+  const chartable = EXAM_FIELDS.filter((f) => all.filter((x) => x.v[f.k] != null).length >= 2);
+  if (!chartable.some((f) => f.k === examMetric)) examMetric = (chartable.find((f) => f.k === 'gordura_pct') || chartable[0])?.k || null;
+  const mf = examMetric && examField(examMetric);
+
+  const bmr = examBmr(last);
+  const usingThis = p.tmbExame && p.tmbExame.date === last.ex.date && p.tmbExame.kcal === bmr?.kcal;
+  const keyLine = (v) => [['peso', ''], ['gordura_pct', ' gordura'], ['massa_muscular', ' músculo']]
+    .filter(([k]) => v[k] != null).map(([k, suffix]) => valueText(examField(k), v[k]) + suffix).join(' · ');
+
+  setView('#view-exames',
+    header,
+    addBtn,
+    h('div', { class: 'card', style: 'margin-top:14px' },
+      h('div', { class: 'card-head' }, h('h2', { text: 'Último exame' }), h('span', { class: 'muted', text: fmtDate(last.ex.date) })),
+      h('div', { class: 'tiles' }, EXAM_FIELDS.filter((f) => last.v[f.k] != null).map((f) => h('div', { class: 'tile' },
+        h('small', { text: f.label }),
+        h('b', { text: valueText(f, last.v[f.k]) }),
+        prev && deltaEl(f, last.v[f.k], prev.v[f.k])))),
+      prev && h('small', { class: 'muted', text: `As setas comparam com o exame de ${fmtDate(prev.ex.date)} (verde = na direção do seu objetivo).` }),
+      since.length > 0 && h('p', { class: 'since', text: `Desde o primeiro exame (${fmtDate(first.ex.date)}): ${since.join(' · ')}` }),
+      h('button', { type: 'button', class: 'btn btn-line', style: 'margin-top:12px', onclick: () => openExamDetail(last.ex) }, 'Ver exame completo e foto')),
+    h('div', { class: 'card' },
+      h('h2', { text: '📈 Evolução' }),
+      mf
+        ? [
+          h('div', { class: 'chips' }, chartable.map((f) => h('button', {
+            type: 'button', class: 'chip' + (f.k === examMetric ? ' on' : ''),
+            onclick: () => { examMetric = f.k; render(); },
+          }, f.short))),
+          lineChart(all.filter((x) => x.v[mf.k] != null).map((x) => ({ date: x.ex.date, v: x.v[mf.k] })), { decimals: mf.dec ?? 1, label: `Evolução: ${mf.label}` }),
+          h('small', { class: 'muted', text: `${mf.label}${mf.unit ? ` (${mf.unit})` : ''}` }),
+        ]
+        : h('p', { class: 'muted', text: 'Adicione o próximo exame para ver os gráficos de evolução.' })),
+    bmr && h('div', { class: 'card' },
+      h('h2', { text: '🔥 Seu metabolismo' }),
+      h('p', { text: `Pelo exame de ${fmtDate(last.ex.date)}, o seu metabolismo basal é de ${fmt(bmr.kcal)} kcal por dia (${bmr.fonte === 'aparelho' ? 'medido pelo aparelho' : 'estimado pela sua massa magra'}). O questionário estimava ${fmt(mifflin(p))} kcal.` }),
+      usingThis
+        ? h('p', { class: 'ok', text: '✅ Suas metas já usam este exame.' })
+        : h('button', {
+          type: 'button', class: 'btn btn-ghost', style: 'margin-top:10px',
+          onclick: () => {
+            state.profile.tmbExame = { ...bmr, date: last.ex.date };
+            applyGoalsFromPlan('Metas atualizadas com a sua bioimpedância');
+          },
+        }, 'Usar este exame nas minhas metas'),
+      p.tmbExame && h('button', {
+        type: 'button', class: 'btn btn-line', style: 'margin-top:8px',
+        onclick: () => {
+          delete state.profile.tmbExame;
+          applyGoalsFromPlan('Metas voltaram à estimativa do questionário');
+        },
+      }, 'Voltar à estimativa do questionário')),
+    h('div', { class: 'card' },
+      h('h2', { text: `🗂️ Histórico (${all.length})` }),
+      [...all].reverse().map(({ ex, v }) => h('button', { type: 'button', class: 'exam-row', onclick: () => openExamDetail(ex) },
+        thumb(ex),
+        h('div', {}, h('b', { text: fmtDate(ex.date) }), h('small', { text: keyLine(v) || ex.local || 'Toque para ver' })),
+        h('span', { class: 'chev', text: '›' })))),
+  );
+}
+
+let editingExam = null;
+let examPhotoBlob = null;
+let previewUrl = null;
+
+function setPreview(url) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null;
+  const img = $('#examPreview');
+  img.hidden = !url;
+  if (url) img.src = url;
+  else img.removeAttribute('src');
+  $('#examPhotoLabel').textContent = url ? '📷 Trocar foto' : '📷 Anexar foto do resultado';
+}
+
+function openExamForm(ex) {
+  editingExam = ex || null;
+  examPhotoBlob = null;
+  const form = $('#examForm');
+  form.reset();
+  $('#examTitle').textContent = ex ? 'Editar exame' : 'Nova bioimpedância';
+  form.elements.date.value = ex?.date || today();
+  for (const f of EXAM_FIELDS) form.elements[f.k].value = ex?.values[f.k] != null ? String(ex.values[f.k]).replace('.', ',') : '';
+  form.elements.local.value = ex?.local || '';
+  form.elements.notes.value = ex?.notes || '';
+  setPreview(null);
+  if (ex?.photo) photoUrl(ex.photo).then((u) => { if (u && editingExam === ex && !examPhotoBlob) setPreview(u); });
+  $('#examSheet').showModal();
+}
+
+async function saveExam(e) {
+  e.preventDefault();
+  const el = e.target.elements;
+  const values = {};
+  for (const f of EXAM_FIELDS) {
+    const v = parseNum(el[f.k].value);
+    if (Number.isFinite(v) && v >= 0) values[f.k] = v;
+  }
+  if (!Object.keys(values).length && !examPhotoBlob && !editingExam?.photo) {
+    toast('Anexe a foto ou preencha pelo menos um valor.');
+    return;
+  }
+  const ex = editingExam || { id: 'ex' + Date.now().toString(36) };
+  if (examPhotoBlob) {
+    try {
+      await putPhoto(ex.id, examPhotoBlob);
+    } catch (err) {
+      alert('Não foi possível salvar a foto neste aparelho.');
+      return;
+    }
+    forgetPhotoUrl(ex.id);
+    ex.photo = ex.id;
+  }
+  Object.assign(ex, { date: el.date.value || today(), values, local: el.local.value.trim(), notes: el.notes.value.trim() });
+  if (!editingExam) state.exams.push(ex);
+  state.exams.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  if (values.peso) logWeight(ex.date, r1(values.peso));
+  save();
+  // Pede ao navegador para não apagar os dados do app quando faltar espaço.
+  navigator.storage?.persist?.().catch(() => {});
+  $('#examSheet').close();
+  tab = 'exames';
+  render();
+  toast(editingExam ? 'Exame atualizado' : 'Exame salvo 📋');
+}
+
+function openExamDetail(ex) {
+  const { v, calc } = examValues(ex);
+  const idx = state.exams.indexOf(ex);
+  const prev = idx > 0 ? examValues(state.exams[idx - 1]).v : null;
+  const dlg = $('#examView');
+  let img = null;
+  if (ex.photo) {
+    img = h('img', { class: 'exam-photo', alt: 'Foto do resultado impresso', onclick: () => openViewer(img.src) });
+    photoUrl(ex.photo).then((u) => {
+      if (u) img.src = u;
+      else img.replaceWith(h('p', { class: 'muted', text: 'Foto não encontrada neste aparelho.' }));
+    }).catch(() => {});
+  }
+  $('#examViewBody').replaceChildren(...[
+    h('div', { class: 'sheet-head' },
+      h('div', {}, h('h2', { text: `Bioimpedância de ${fmtDate(ex.date)}` }), ex.local ? h('small', { class: 'muted', text: ex.local }) : null),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fechar', onclick: () => dlg.close() }, '✕')),
+    img,
+    img && h('small', { class: 'muted center', text: 'Toque na foto para ampliar' }),
+    h('div', {}, EXAM_FIELDS.filter((f) => v[f.k] != null).map((f) => h('div', { class: 'kv' },
+      h('span', { text: f.label + (calc.has(f.k) ? ' (calculado)' : '') }),
+      h('b', { text: valueText(f, v[f.k]) }),
+      prev && deltaEl(f, v[f.k], prev[f.k])))),
+    ex.notes ? h('p', { class: 'note', text: ex.notes }) : null,
+    h('div', { class: 'grid2' },
+      h('button', { type: 'button', class: 'btn btn-line', onclick: () => { dlg.close(); openExamForm(ex); } }, 'Editar'),
+      h('button', { type: 'button', class: 'btn btn-line danger', onclick: () => deleteExam(ex) }, 'Excluir')),
+  ].filter(Boolean));
+  dlg.showModal();
+}
+
+function deleteExam(ex) {
+  if (!confirm(`Excluir o exame de ${fmtDate(ex.date)}? A foto também será apagada deste aparelho.`)) return;
+  state.exams = state.exams.filter((x) => x !== ex);
+  if (ex.photo) {
+    deletePhoto(ex.photo).catch(() => {});
+    forgetPhotoUrl(ex.photo);
+  }
+  save();
+  $('#examView').close();
+  render();
+  toast('Exame excluído');
+}
+
+function openViewer(src) {
+  if (!src) return;
+  const img = $('#viewerImg');
+  img.src = src;
+  img.classList.remove('zoom');
+  $('#viewer').showModal();
+}
+
+/* ================= Instalar no celular ================= */
+
+let installEvent = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const INSTALL_DISMISSED = 'foodvisor:install-dismissed';
+
+function installCard(dismissable) {
+  if (isStandalone()) return null;
+  if (dismissable) {
+    try {
+      if (localStorage.getItem(INSTALL_DISMISSED)) return null;
+    } catch (e) { /* storage indisponível: mostra o convite */ }
+  }
+  const how = isIos()
+    ? 'No Safari, toque em Compartilhar (quadrado com seta para cima) e depois em "Adicionar à Tela de Início".'
+    : installEvent
+      ? 'Ele ganha um ícone na tela inicial e abre em tela cheia, mesmo sem internet.'
+      : 'No Chrome, abra o menu ⋮ e toque em "Instalar app" ou "Adicionar à tela inicial".';
+  return h('div', { class: 'card install' },
+    h('span', { class: 'emoji', text: '📲' }),
+    h('div', {},
+      h('b', { text: 'Instale o app no seu celular' }),
+      h('p', { class: 'muted', text: how }),
+      isIos() && !dismissable && h('p', { class: 'muted', text: 'No iPhone, o app instalado começa vazio: use "Exportar backup" aqui e "Importar backup" no app.' }),
+      installEvent && h('button', {
+        type: 'button', class: 'btn btn-primary small',
+        onclick: async () => {
+          installEvent.prompt();
+          await installEvent.userChoice.catch(() => {});
+          installEvent = null;
+          render();
+        },
+      }, 'Instalar agora')),
+    dismissable && h('button', {
+      type: 'button', class: 'del', 'aria-label': 'Dispensar',
+      onclick: () => {
+        try { localStorage.setItem(INSTALL_DISMISSED, '1'); } catch (e) { /* ignora */ }
+        render();
+      },
+    }, '✕'));
 }
 
 /* ================= Adicionar alimentos ================= */
@@ -1019,7 +1438,6 @@ document.querySelectorAll('.tabbar [data-tab]').forEach((b) => b.addEventListene
   render();
   window.scrollTo(0, 0);
 }));
-$('#fab').onclick = () => openAdd();
 $('#search').addEventListener('input', renderResults);
 $('#customBtn').onclick = () => {
   const form = $('#customForm');
@@ -1053,6 +1471,30 @@ $('#qtyAdd').onclick = () => {
   const q = readQty();
   if (q && pending) confirmAdd(pending, q);
 };
+$('#examFields').replaceChildren(...EXAM_FIELDS.map((f) => h('label', { class: 'field' },
+  f.unit ? `${f.label} (${f.unit})` : f.label,
+  h('input', { name: f.k, type: 'text', inputmode: 'decimal', autocomplete: 'off' }))));
+$('#examForm').addEventListener('submit', saveExam);
+$('#examPhoto').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('#examPhotoLabel').textContent = 'Processando a foto…';
+  examPhotoBlob = await compressPhoto(file);
+  setPreview(URL.createObjectURL(examPhotoBlob));
+  previewUrl = $('#examPreview').src;
+});
+$('#examPreview').onclick = () => openViewer($('#examPreview').src);
+$('#viewerImg').onclick = (e) => e.currentTarget.classList.toggle('zoom');
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installEvent = e;
+  if (!$('#app').hidden) render();
+});
+window.addEventListener('appinstalled', () => {
+  installEvent = null;
+  if (!$('#app').hidden) render();
+});
 document.querySelectorAll('dialog').forEach((d) => {
   d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
   d.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => d.close()));
