@@ -4,10 +4,9 @@ Diário de alimentação (calorias e macros) como **PWA**: instala no celular co
 
 ## Como usar no celular (sem computador ligado)
 
-1. Faça push na branch padrão (o workflow roda em `main` e em `claude/mobile-local-app-access-lq6l1q`).
-2. No GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. O workflow `Publicar no GitHub Pages` publica em `https://<seu-usuario>.github.io/Foodvisor/`.
-4. Abra esse endereço no celular **uma vez, com internet**:
+1. O app está publicado em **https://ksimon02.github.io/Foodvisor/** (GitHub Pages, branch `gh-pages`).
+   A cada push na branch padrão, o workflow `Publicar no GitHub Pages` atualiza a `gh-pages` automaticamente.
+2. Abra esse endereço no celular **uma vez, com internet**:
    - **Android (Chrome):** menu ⋮ → *Instalar app*.
    - **iPhone (Safari):** Compartilhar → *Adicionar à Tela de Início*.
 

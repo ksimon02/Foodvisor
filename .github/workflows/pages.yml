@@ -1,14 +1,13 @@
 name: Publicar no GitHub Pages
 
+# Copia o app para a branch gh-pages, que o GitHub Pages publica.
 on:
   push:
     branches: [main, claude/mobile-local-app-access-lq6l1q]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -17,14 +16,14 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Atualizar branch gh-pages
+        run: |
+          rm -rf .github && touch .nojekyll
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages-tmp
+          git add -A
+          git commit -m "Publica ${GITHUB_SHA::7}"
+          git push --force origin HEAD:gh-pages
