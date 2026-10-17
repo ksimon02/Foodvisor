@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Foodvisor</title>
+  <meta name="theme-color" content="#2e7d32">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Foodvisor">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <button id="prev" aria-label="Dia anterior">‹</button>
+    <div>
+      <input type="date" id="date">
+      <div id="dateLabel"></div>
+    </div>
+    <button id="next" aria-label="Próximo dia">›</button>
+  </header>
+
+  <main>
+    <section class="card summary">
+      <div class="ring" id="ring"><span id="kcalLeft">0</span><small>kcal restantes</small></div>
+      <div class="totals">
+        <div><b id="kcalTotal">0</b> / <span id="kcalGoal">2000</span> kcal</div>
+        <div class="macro"><span>Proteína</span><meter id="mP" min="0" value="0"></meter><em id="tP">0 g</em></div>
+        <div class="macro"><span>Carboidrato</span><meter id="mC" min="0" value="0"></meter><em id="tC">0 g</em></div>
+        <div class="macro"><span>Gordura</span><meter id="mF" min="0" value="0"></meter><em id="tF">0 g</em></div>
+      </div>
+    </section>
+
+    <section id="meals"></section>
+
+    <section class="card">
+      <details>
+        <summary>Metas e dados</summary>
+        <form id="goals">
+          <label>Calorias (kcal)<input name="kcal" type="number" min="0" inputmode="numeric"></label>
+          <label>Proteína (g)<input name="p" type="number" min="0" inputmode="numeric"></label>
+          <label>Carboidrato (g)<input name="c" type="number" min="0" inputmode="numeric"></label>
+          <label>Gordura (g)<input name="f" type="number" min="0" inputmode="numeric"></label>
+          <button type="submit">Salvar metas</button>
+        </form>
+        <div class="row">
+          <button id="export" type="button">Exportar backup</button>
+          <label class="btn">Importar backup<input id="import" type="file" accept="application/json" hidden></label>
+        </div>
+        <p class="hint">Os dados ficam só neste aparelho. Faça backup de vez em quando.</p>
+      </details>
+    </section>
+  </main>
+
+  <dialog id="dlg">
+    <form id="foodForm" method="dialog">
+      <h2 id="dlgTitle">Adicionar alimento</h2>
+      <input type="hidden" name="meal">
+      <label>Nome<input name="name" required list="recents" autocomplete="off"></label>
+      <datalist id="recents"></datalist>
+      <div class="grid">
+        <label>Calorias (kcal)<input name="kcal" type="number" min="0" step="any" inputmode="decimal" required></label>
+        <label>Proteína (g)<input name="p" type="number" min="0" step="any" inputmode="decimal"></label>
+        <label>Carboidrato (g)<input name="c" type="number" min="0" step="any" inputmode="decimal"></label>
+        <label>Gordura (g)<input name="f" type="number" min="0" step="any" inputmode="decimal"></label>
+      </div>
+      <div class="row">
+        <button type="button" id="cancel">Cancelar</button>
+        <button type="submit" class="primary">Adicionar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
