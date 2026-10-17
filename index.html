@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Foodvisor</title>
-  <meta name="theme-color" content="#2e7d32">
+  <meta name="description" content="Diário alimentar personalizado: calorias, macros, água e peso.">
+  <meta name="theme-color" content="#18b981">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Foodvisor">
@@ -14,66 +15,108 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <button id="prev" aria-label="Dia anterior">‹</button>
-    <div>
-      <input type="date" id="date">
-      <div id="dateLabel"></div>
+  <!-- Questionário inicial -->
+  <div id="onboarding" class="onboarding" hidden>
+    <div class="ob-top">
+      <button id="obBack" class="icon-btn" type="button" aria-label="Voltar">‹</button>
+      <div class="ob-progress"><div id="obBar"></div></div>
     </div>
-    <button id="next" aria-label="Próximo dia">›</button>
-  </header>
+    <div id="obEta" class="ob-eta" hidden></div>
+    <div id="obStep" class="ob-step"></div>
+    <div class="ob-footer"><button id="obNext" class="btn btn-primary" type="button">Continuar</button></div>
+  </div>
 
-  <main>
-    <section class="card summary">
-      <div class="ring" id="ring"><span id="kcalLeft">0</span><small>kcal restantes</small></div>
-      <div class="totals">
-        <div><b id="kcalTotal">0</b> / <span id="kcalGoal">2000</span> kcal</div>
-        <div class="macro"><span>Proteína</span><meter id="mP" min="0" value="0"></meter><em id="tP">0 g</em></div>
-        <div class="macro"><span>Carboidrato</span><meter id="mC" min="0" value="0"></meter><em id="tC">0 g</em></div>
-        <div class="macro"><span>Gordura</span><meter id="mF" min="0" value="0"></meter><em id="tF">0 g</em></div>
+  <!-- App -->
+  <div id="app" hidden>
+    <main>
+      <section id="view-diario" class="view"></section>
+      <section id="view-progresso" class="view" hidden></section>
+      <section id="view-plano" class="view" hidden></section>
+      <section id="view-perfil" class="view" hidden></section>
+    </main>
+    <nav class="tabbar" aria-label="Navegação">
+      <button type="button" data-tab="diario">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3M9 7h6M9 10.5h4"/></svg>
+        <span>Diário</span>
+      </button>
+      <button type="button" data-tab="progresso">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 16v-4M11 16V8M16 16v-6M20 16V5"/></svg>
+        <span>Progresso</span>
+      </button>
+      <button type="button" id="fab" class="fab" aria-label="Adicionar alimento">+</button>
+      <button type="button" data-tab="plano">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20c0-9 6-15 15-15 0 9-6 15-15 15z"/><path d="M5 20l8-8"/></svg>
+        <span>Plano</span>
+      </button>
+      <button type="button" data-tab="perfil">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>
+        <span>Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Buscar e adicionar alimento -->
+  <dialog id="addSheet" class="sheet" aria-labelledby="addTitle">
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <div><h2 id="addTitle">Adicionar alimento</h2><small id="addDay" class="muted"></small></div>
+        <button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button>
       </div>
-    </section>
+      <div id="mealChips" class="chips"></div>
+      <input id="search" class="search" type="search" placeholder="Buscar alimento (ex.: arroz, ovo, banana)" autocomplete="off">
+      <div id="results" class="results"></div>
+      <button id="customBtn" type="button" class="btn btn-ghost">+ Criar alimento manualmente</button>
+    </div>
+  </dialog>
 
-    <section id="meals"></section>
-
-    <section class="card">
-      <details>
-        <summary>Metas e dados</summary>
-        <form id="goals">
-          <label>Calorias (kcal)<input name="kcal" type="number" min="0" inputmode="numeric"></label>
-          <label>Proteína (g)<input name="p" type="number" min="0" inputmode="numeric"></label>
-          <label>Carboidrato (g)<input name="c" type="number" min="0" inputmode="numeric"></label>
-          <label>Gordura (g)<input name="f" type="number" min="0" inputmode="numeric"></label>
-          <button type="submit">Salvar metas</button>
-        </form>
-        <div class="row">
-          <button id="export" type="button">Exportar backup</button>
-          <label class="btn">Importar backup<input id="import" type="file" accept="application/json" hidden></label>
-        </div>
-        <p class="hint">Os dados ficam só neste aparelho. Faça backup de vez em quando.</p>
-      </details>
-    </section>
-  </main>
-
-  <dialog id="dlg">
-    <form id="foodForm" method="dialog">
-      <h2 id="dlgTitle">Adicionar alimento</h2>
-      <input type="hidden" name="meal">
-      <label>Nome<input name="name" required list="recents" autocomplete="off"></label>
-      <datalist id="recents"></datalist>
-      <div class="grid">
-        <label>Calorias (kcal)<input name="kcal" type="number" min="0" step="any" inputmode="decimal" required></label>
-        <label>Proteína (g)<input name="p" type="number" min="0" step="any" inputmode="decimal"></label>
-        <label>Carboidrato (g)<input name="c" type="number" min="0" step="any" inputmode="decimal"></label>
-        <label>Gordura (g)<input name="f" type="number" min="0" step="any" inputmode="decimal"></label>
+  <!-- Quantidade -->
+  <dialog id="qtySheet" class="sheet" aria-labelledby="qtyName">
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <div><h2 id="qtyName"></h2><small id="qtyPortion" class="muted"></small></div>
+        <button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button>
       </div>
-      <div class="row">
-        <button type="button" id="cancel">Cancelar</button>
-        <button type="submit" class="primary">Adicionar</button>
+      <p id="qtyWarn" class="note" hidden></p>
+      <div class="qty">
+        <button id="qtyMinus" type="button" class="icon-btn" aria-label="Menos">−</button>
+        <input id="qtyInput" type="text" inputmode="decimal" aria-label="Quantidade de porções">
+        <button id="qtyPlus" type="button" class="icon-btn" aria-label="Mais">+</button>
       </div>
+      <p class="muted center">porções</p>
+      <div id="qtyChips" class="chips center">
+        <button type="button" class="chip" data-q="0.5">½</button>
+        <button type="button" class="chip" data-q="1">1</button>
+        <button type="button" class="chip" data-q="1.5">1½</button>
+        <button type="button" class="chip" data-q="2">2</button>
+        <button type="button" class="chip" data-q="3">3</button>
+      </div>
+      <div id="qtyMacros" class="stats four"></div>
+      <button id="qtyAdd" type="button" class="btn btn-primary">Adicionar</button>
+    </div>
+  </dialog>
+
+  <!-- Alimento manual -->
+  <dialog id="customSheet" class="sheet" aria-labelledby="customTitle">
+    <form id="customForm" class="sheet-body">
+      <div class="sheet-head">
+        <h2 id="customTitle">Criar alimento</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button>
+      </div>
+      <label class="field">Nome<input name="name" required autocomplete="off"></label>
+      <label class="field">Porção<input name="portion" placeholder="ex.: 1 prato (300 g)" autocomplete="off"></label>
+      <div class="grid2">
+        <label class="field">Calorias (kcal)<input name="kcal" inputmode="decimal" required></label>
+        <label class="field">Proteínas (g)<input name="p" inputmode="decimal"></label>
+        <label class="field">Carboidratos (g)<input name="c" inputmode="decimal"></label>
+        <label class="field">Gorduras (g)<input name="f" inputmode="decimal"></label>
+      </div>
+      <button type="submit" class="btn btn-primary">Adicionar</button>
     </form>
   </dialog>
 
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="foods.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

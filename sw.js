@@ -1,6 +1,6 @@
 // Cache do app shell para funcionar offline. Aumente a versão ao alterar arquivos.
-const CACHE = 'foodvisor-v1';
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+const CACHE = 'foodvisor-v2';
+const FILES = ['./', 'index.html', 'style.css', 'foods.js', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/avocado.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
