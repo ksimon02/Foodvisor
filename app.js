@@ -106,6 +106,7 @@ function load() {
     water: d.water || {},
     weights: d.weights || [],
     exams: d.exams || [],
+    customFoods: d.customFoods || [],
   };
 }
 function save() {
@@ -1367,25 +1368,45 @@ function foodRow(f) {
     h('b', { text: `${fmt(f.kcal)} kcal` }));
 }
 
+// Alimentos criados à mão ficam salvos para as próximas vezes, com um botão para apagar.
+function customRow(f) {
+  return h('div', { class: 'food-wrap' }, foodRow(f), h('button', {
+    type: 'button', class: 'del', 'aria-label': `Apagar ${f.name} dos meus alimentos`,
+    onclick: () => {
+      if (!confirm(`Apagar "${f.name}" dos seus alimentos? Os registros já feitos continuam no diário.`)) return;
+      state.customFoods = state.customFoods.filter((x) => x !== f);
+      save();
+      renderResults();
+    },
+  }, '✕'));
+}
+
+function saveCustomFood(food) {
+  state.customFoods = state.customFoods.filter((x) => norm(x.name) !== norm(food.name));
+  state.customFoods.push(food);
+  state.customFoods.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
 function renderResults() {
   const q = norm($('#search').value.trim());
   const box = $('#results');
   box.replaceChildren();
   if (!q) {
-    const rec = recents().slice(0, 8);
+    if (state.customFoods.length) box.append(h('h3', { text: 'Meus alimentos' }), ...state.customFoods.map(customRow));
+    const rec = recents().filter((f) => !state.customFoods.some((c) => norm(c.name) === norm(f.name))).slice(0, 8);
     if (rec.length) box.append(h('h3', { text: 'Recentes' }), ...rec.map(foodRow));
     box.append(h('h3', { text: 'Sugestões para você' }), ...FOOD_DB.filter(suitable).map(foodRow));
     return;
   }
   const seen = new Set();
-  const res = [...recents(), ...FOOD_DB].filter((f) => {
+  const res = [...state.customFoods, ...recents(), ...FOOD_DB].filter((f) => {
     const k = norm(f.name);
     if (seen.has(k) || !k.includes(q)) return false;
     seen.add(k);
     return true;
   });
   if (!res.length) box.append(h('p', { class: 'muted', text: 'Nada encontrado. Crie o alimento manualmente logo abaixo.' }));
-  box.append(...res.slice(0, 50).map(foodRow));
+  box.append(...res.slice(0, 50).map((f) => (state.customFoods.includes(f) ? customRow(f) : foodRow(f))));
 }
 
 function openQty(f) {
@@ -1458,6 +1479,7 @@ $('#customForm').addEventListener('submit', (e) => {
     tags: [],
   };
   if (!food.name) return;
+  saveCustomFood(food);
   confirmAdd(food, 1);
 });
 $('#qtyInput').addEventListener('input', updateQty);

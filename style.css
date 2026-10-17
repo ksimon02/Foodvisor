@@ -386,6 +386,8 @@ dialog.sheet[open] { animation: up 0.22s ease-out; }
   border-bottom: 1px solid var(--line);
 }
 .food > div { flex: 1; min-width: 0; }
+.food-wrap { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.food-wrap .food { border-bottom: 0; }
 .food small { display: block; color: var(--muted); font-size: 12px; }
 .food b { white-space: nowrap; font-size: 14px; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--warn-bg); margin: 3px 4px 0 0; }
